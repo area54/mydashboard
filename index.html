@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Cloud Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Your specific Firebase credentials
+        const firebaseConfig = {
+            apiKey: "AIzaSyD5gBVqu47pTQyV-rr9pew85S0RuHpUckE",
+            authDomain: "myweathervault.firebaseapp.com",
+            projectId: "myweathervault",
+            storageBucket: "myweathervault.firebasestorage.app",
+            messagingSenderId: "824158412403",
+            appId: "1:824158412403:web:fc3aed62061528f9275406"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const dashCol = collection(db, "dashboard");
+
+        // Logic Functions
+        window.addNewGroup = async () => {
+            const name = prompt("Name this new workspace:");
+            if (name) await addDoc(dashCol, { name, links: [], createdAt: Date.now() });
+        };
+
+        window.addLink = async (id, currentLinks) => {
+            const title = prompt("Tab Label:");
+            const url = prompt("URL:");
+            if (title && url) {
+                const cleanUrl = url.startsWith('http') ? url : `https://${url}`;
+                const updatedLinks = [...currentLinks, { title, url: cleanUrl }];
+                await updateDoc(doc(db, "dashboard", id), { links: updatedLinks });
+            }
+        };
+
+        window.deleteLink = async (id, currentLinks, linkIndex) => {
+            const updatedLinks = currentLinks.filter((_, i) => i !== linkIndex);
+            await updateDoc(doc(db, "dashboard", id), { links: updatedLinks });
+        };
+
+        window.deleteGroup = async (id) => {
+            if (confirm("Delete this entire context?")) await deleteDoc(doc(db, "dashboard", id));
+        };
+
+        window.launchGroup = (links) => {
+            links.forEach((link, i) => {
+                setTimeout(() => { window.open(link.url, '_blank'); }, i * 250);
+            });
+        };
+
+        // Real-time Sync
+        const q = query(dashCol, orderBy("createdAt", "asc"));
+        onSnapshot(q, (snapshot) => {
+            const contexts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderUI(contexts);
+        });
+
+        function renderUI(contexts) {
+            const grid = document.getElementById('dashboardGrid');
+            grid.innerHTML = contexts.map((ctx) => `
+                <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-2xl flex flex-col transition-all hover:border-slate-700">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-lg font-bold text-white">${ctx.name}</h3>
+                            <p class="text-[10px] uppercase text-slate-500 font-bold">${ctx.links.length} Resources</p>
+                        </div>
+                        <button onclick="deleteGroup('${ctx.id}')" class="text-slate-600 hover:text-red-400">&times;</button>
+                    </div>
+                    <div class="space-y-1 mb-6 flex-grow">
+                        ${ctx.links.map((link, i) => `
+                            <div class="flex items-center justify-between bg-slate-800/40 p-2 rounded-lg group">
+                                <button onclick="window.open('${link.url}', '_blank')" class="text-sm text-slate-300 hover:text-blue-400 truncate text-left flex-grow">
+                                    ${link.title}
+                                </button>
+                                <button onclick="deleteLink('${ctx.id}', ${JSON.stringify(ctx.links).replace(/"/g, '&quot;')}, ${i})" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 px-1 transition-opacity">
+                                    &times;
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 pt-4 border-t border-slate-800">
+                        <button onclick='launchGroup(${JSON.stringify(ctx.links)})' class="col-span-3 bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white py-2 rounded-lg text-xs font-black uppercase tracking-tighter transition-all">
+                            Launch Session
+                        </button>
+                        <button onclick="addLink('${ctx.id}', ${JSON.stringify(ctx.links).replace(/"/g, '&quot;')})" class="col-span-1 bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg flex justify-center items-center">
+                            +
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+    </script>
+
+    <script>
+        // Loader Control
+        window.addEventListener('load', () => {
+            const loader = document.getElementById('loader');
+            setTimeout(() => {
+                loader.classList.add('fade-away');
+            }, 3000); 
+        });
+    </script>
+
+    <style>
+        .ripple {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: water-ripple 4s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .ripple-1 { animation-delay: 0s; }
+        .ripple-2 { animation-delay: 1s; }
+        .ripple-3 { animation-delay: 2s; }
+        @keyframes water-ripple {
+            0% { width: 0; height: 0; opacity: 0.8; }
+            100% { width: 1000px; height: 1000px; opacity: 0; border-width: 1px; }
+        }
+        .fade-away {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="bg-[#020617] text-slate-200 p-8 min-h-screen">
+    <div id="loader" class="fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]">
+        <div class="relative flex items-center justify-center">
+            <div class="z-10 w-12 h-12 rounded-full border-4 border-white shadow-[0_0_20px_rgba(255,255,255,0.8)] animate-pulse"></div>
+            <div class="ripple ripple-1"></div>
+            <div class="ripple ripple-2"></div>
+            <div class="ripple ripple-3"></div>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-end mb-12 border-b border-slate-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">Cloud Command Center</h1>
+                <p class="text-slate-400 text-sm">Status: <span class="text-emerald-400 font-mono italic">Synced to Firebase</span></p>
+            </div>
+            <button onclick="addNewGroup()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg shadow-blue-900/20 transition-all">
+                + New Context
+            </button>
+        </header>
+        <div id="dashboardGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </div>
+</body>
+</html>
